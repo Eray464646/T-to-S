@@ -142,9 +142,9 @@
         errorMessage.style.display = 'none';
         voiceSelect.disabled = false;
         btnStart.disabled = false;
-        btnPause.disabled = false;
-        btnResume.disabled = false;
-        btnStop.disabled = false;
+        btnPause.disabled = true;
+        btnResume.disabled = true;
+        btnStop.disabled = true;
 
         voices.forEach((voice) => {
             const option = document.createElement('option');
@@ -153,6 +153,14 @@
             option.setAttribute('data-name', voice.name);
             voiceSelect.appendChild(option);
         });
+    }
+
+    function updateButtonsState() {
+        if (voices.length === 0) return;
+        btnStart.disabled = false;
+        btnPause.disabled = !synth.speaking || synth.paused;
+        btnResume.disabled = !synth.paused;
+        btnStop.disabled = !synth.speaking;
     }
 
     // Für Browser, die Stimmen asynchron laden
@@ -170,34 +178,62 @@
         const text = textInput.value.trim();
         if (text !== '') {
             const utterThis = new SpeechSynthesisUtterance(text);
-            const selectedOption = voiceSelect.selectedOptions[0].getAttribute('data-name');
             
-            for (let i = 0; i < voices.length; i++) {
-                if (voices[i].name === selectedOption) {
-                    utterThis.voice = voices[i];
-                    break;
+            if (voiceSelect.selectedOptions && voiceSelect.selectedOptions.length > 0) {
+                const selectedOption = voiceSelect.selectedOptions[0].getAttribute('data-name');
+                for (let i = 0; i < voices.length; i++) {
+                    if (voices[i].name === selectedOption) {
+                        utterThis.voice = voices[i];
+                        break;
+                    }
                 }
             }
             
+            utterThis.onstart = updateButtonsState;
+            utterThis.onend = () => {
+                updateButtonsState();
+                // Ensure buttons reset when speech finishes naturally
+                btnPause.disabled = true;
+                btnResume.disabled = true;
+                btnStop.disabled = true;
+            };
+            utterThis.onpause = updateButtonsState;
+            utterThis.onresume = updateButtonsState;
+            utterThis.onerror = () => {
+                updateButtonsState();
+                btnPause.disabled = true;
+                btnResume.disabled = true;
+                btnStop.disabled = true;
+            };
+            
             synth.speak(utterThis);
+            // In some browsers, state might not update instantly
+            setTimeout(updateButtonsState, 100);
         }
     });
 
     btnPause.addEventListener('click', () => {
         if (synth.speaking && !synth.paused) {
             synth.pause();
+            updateButtonsState();
         }
     });
 
     btnResume.addEventListener('click', () => {
         if (synth.paused) {
             synth.resume();
+            updateButtonsState();
         }
     });
 
     btnStop.addEventListener('click', () => {
         if (synth.speaking || synth.paused) {
             synth.cancel();
+            updateButtonsState();
+            // Force reset
+            btnPause.disabled = true;
+            btnResume.disabled = true;
+            btnStop.disabled = true;
         }
     });
 </script>
