@@ -121,7 +121,7 @@
     let synth = window.speechSynthesis;
 
     function populateVoiceList() {
-        // Filtere alle Stimmen, die mit 'de' beginnen (z.B. de-DE, de-AT, de-CH)
+        // Filtert alle Stimmen, die mit 'de' beginnen (z.B. de-DE, de-AT, de-CH)
         voices = synth.getVoices().filter(voice => voice.lang.toLowerCase().startsWith('de'));
         
         voiceSelect.innerHTML = '';
@@ -207,7 +207,7 @@
             };
             
             synth.speak(utterThis);
-            // In some browsers, state might not update instantly
+            // In some browsers, state might not update instantly, wait 100ms
             setTimeout(updateButtonsState, 100);
         }
     });
