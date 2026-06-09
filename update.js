@@ -1,116 +1,9 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Text-to-Speech</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .container {
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 500px;
-        }
-        h1 {
-            text-align: center;
-            margin-top: 0;
-            color: #007bff;
-        }
-        textarea {
-            width: 100%;
-            height: 150px;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            resize: vertical;
-            font-size: 16px;
-            box-sizing: border-box;
-            margin-bottom: 15px;
-            font-family: inherit;
-        }
-        select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 16px;
-            margin-bottom: 15px;
-            box-sizing: border-box;
-            background-color: #fff;
-        }
-        .controls {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-        .controls label {
-            display: flex;
-            flex-direction: column;
-            font-size: 14px;
-            font-weight: bold;
-        }
-        .controls input[type="range"] {
-            margin-top: 5px;
-        }
-        .buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        button {
-            padding: 10px;
-            font-size: 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            background-color: #007bff;
-            color: white;
-            transition: background-color 0.3s;
-            font-weight: bold;
-        }
-        button:hover:not(:disabled) {
-            background-color: #0056b3;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        .error {
-            color: #d9534f;
-            background-color: #f2dede;
-            border: 1px solid #ebccd1;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-            display: none;
-        }
-        .hint {
-            font-size: 12px;
-            color: #666;
-            margin-top: 15px;
-            text-align: center;
-        }
-        @media (max-width: 400px) {
-            .buttons {
-                grid-template-columns: 1fr;
-            }
-        }
-    
+const fs = require('fs');
+
+let html = fs.readFileSync('/tmp/workspace/Eray464646/T-to-S/index.html', 'utf8');
+
+// Insert CSS
+const cssInsert = `
         .current-sentence-box {
             background-color: #e9ecef;
             padding: 15px;
@@ -149,16 +42,11 @@
             background-color: #ffeeba;
             border-radius: 3px;
         }
+`;
+html = html.replace('</style>', cssInsert + '\n    </style>');
 
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <h1>Text-to-Speech</h1>
-    <div id="error-message" class="error">Keine deutsche Stimme verfügbar.</div>
-    <div id="text-error" class="error">Bitte Text eingeben.</div>
-    
+// Insert HTML elements
+const htmlInsert = `
     <div class="current-sentence-box">
         <div class="current-sentence-label">Aktuell gesprochen:</div>
         <div id="current-sentence-display">Noch nichts gestartet.</div>
@@ -167,38 +55,15 @@
     <textarea id="text-input" placeholder="Geben Sie hier Ihren Text ein..."></textarea>
     
     <div id="text-preview" class="text-preview"></div>
+`;
+html = html.replace('<textarea id="text-input" placeholder="Geben Sie hier Ihren Text ein..."></textarea>', htmlInsert);
 
-    
-    <div class="controls">
-        <label>
-            Geschwindigkeit: <span id="rate-val">0.92</span>
-            <input type="range" id="rate" min="0.6" max="1.4" step="0.05" value="0.92">
-        </label>
-        <label>
-            Tonhöhe: <span id="pitch-val">1.0</span>
-            <input type="range" id="pitch" min="0.7" max="1.3" step="0.05" value="1.0">
-        </label>
-        <label>
-            Lautstärke: <span id="volume-val">1.0</span>
-            <input type="range" id="volume" min="0" max="1" step="0.05" value="1.0">
-        </label>
-    </div>
+// Now for the JS script.
+// We will replace the script part entirely to keep it clean.
+const scriptStart = html.indexOf('<script>');
+const scriptEnd = html.indexOf('</script>') + 9;
 
-    <select id="voice-select">
-        <option value="">Lade Stimmen...</option>
-    </select>
-
-    <div class="buttons">
-        <button id="btn-start">Start</button>
-        <button id="btn-pause">Pause</button>
-        <button id="btn-resume">Fortsetzen</button>
-        <button id="btn-stop">Stop</button>
-    </div>
-    
-    <p class="hint">Die verfügbaren Stimmen hängen von deinem Browser und Betriebssystem ab. Für bessere deutsche Stimmen installiere zusätzliche Systemstimmen.</p>
-</div>
-
-<script>
+const newScript = `<script>
     const textInput = document.getElementById('text-input');
     const textPreview = document.getElementById('text-preview');
     const currentSentenceDisplay = document.getElementById('current-sentence-display');
@@ -300,7 +165,7 @@
             const recommended = score >= 10 ? ' (empfohlen)' : '';
             const location = voice.localService ? 'Lokal' : 'Browser/Online';
             
-            option.textContent = `${voice.name} (${voice.lang}, ${location})${recommended}`;
+            option.textContent = \`\${voice.name} (\${voice.lang}, \${location})\${recommended}\`;
             option.value = voice.voiceURI;
             
             if (savedVoiceURI === voice.voiceURI) {
@@ -328,7 +193,7 @@
 
     function splitTextIntoSentences(text) {
         let result = [];
-        const regex = /[\s\S]*?[.!?\n]+|[\s\S]+$/g;
+        const regex = /[\\s\\S]*?[.!?\\n]+|[\\s\\S]+$/g;
         let match;
         while ((match = regex.exec(text)) !== null) {
             if (match[0].length === 0) break;
@@ -569,7 +434,8 @@
     
     // Initial render
     renderHighlightedText(-1);
-</script>
+</script>`;
 
-</body>
-</html>
+html = html.substring(0, scriptStart) + newScript + html.substring(scriptEnd);
+fs.writeFileSync('/tmp/workspace/Eray464646/T-to-S/index.html', html);
+console.log("Updated!");
