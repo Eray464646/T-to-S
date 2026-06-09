@@ -52,6 +52,21 @@
             box-sizing: border-box;
             background-color: #fff;
         }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .controls label {
+            display: flex;
+            flex-direction: column;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .controls input[type="range"] {
+            margin-top: 5px;
+        }
         .buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -84,6 +99,12 @@
             margin-bottom: 15px;
             display: none;
         }
+        .hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 15px;
+            text-align: center;
+        }
         @media (max-width: 400px) {
             .buttons {
                 grid-template-columns: 1fr;
@@ -96,16 +117,36 @@
 <div class="container">
     <h1>Text-to-Speech</h1>
     <div id="error-message" class="error">Keine deutsche Stimme verfügbar.</div>
+    <div id="text-error" class="error">Bitte Text eingeben.</div>
     <textarea id="text-input" placeholder="Geben Sie hier Ihren Text ein..."></textarea>
+    
+    <div class="controls">
+        <label>
+            Geschwindigkeit: <span id="rate-val">0.92</span>
+            <input type="range" id="rate" min="0.6" max="1.4" step="0.05" value="0.92">
+        </label>
+        <label>
+            Tonhöhe: <span id="pitch-val">1.0</span>
+            <input type="range" id="pitch" min="0.7" max="1.3" step="0.05" value="1.0">
+        </label>
+        <label>
+            Lautstärke: <span id="volume-val">1.0</span>
+            <input type="range" id="volume" min="0" max="1" step="0.05" value="1.0">
+        </label>
+    </div>
+
     <select id="voice-select">
         <option value="">Lade Stimmen...</option>
     </select>
+
     <div class="buttons">
         <button id="btn-start">Start</button>
         <button id="btn-pause">Pause</button>
         <button id="btn-resume">Fortsetzen</button>
         <button id="btn-stop">Stop</button>
     </div>
+    
+    <p class="hint">Die verfügbaren Stimmen hängen von deinem Browser und Betriebssystem ab. Für bessere deutsche Stimmen installiere zusätzliche Systemstimmen.</p>
 </div>
 
 <script>
@@ -116,21 +157,66 @@
     const btnResume = document.getElementById('btn-resume');
     const btnStop = document.getElementById('btn-stop');
     const errorMessage = document.getElementById('error-message');
+    const textError = document.getElementById('text-error');
+    
+    const rateInput = document.getElementById('rate');
+    const pitchInput = document.getElementById('pitch');
+    const volumeInput = document.getElementById('volume');
+    const rateVal = document.getElementById('rate-val');
+    const pitchVal = document.getElementById('pitch-val');
+    const volumeVal = document.getElementById('volume-val');
 
     let voices = [];
     let synth = window.speechSynthesis;
 
-    function populateVoiceList() {
-        // Filtert alle Stimmen, die mit 'de' beginnen (z.B. de-DE, de-AT, de-CH)
-        voices = synth.getVoices().filter(voice => voice.lang.toLowerCase().startsWith('de'));
+    const savedRate = localStorage.getItem('tts-rate') || '0.92';
+    const savedPitch = localStorage.getItem('tts-pitch') || '1.0';
+    const savedVolume = localStorage.getItem('tts-volume') || '1.0';
+    
+    rateInput.value = savedRate;
+    pitchInput.value = savedPitch;
+    volumeInput.value = savedVolume;
+    rateVal.textContent = savedRate;
+    pitchVal.textContent = savedPitch;
+    volumeVal.textContent = savedVolume;
+
+    function updateValue(input, display, storageKey) {
+        input.addEventListener('input', () => {
+            display.textContent = input.value;
+            localStorage.setItem(storageKey, input.value);
+        });
+    }
+
+    updateValue(rateInput, rateVal, 'tts-rate');
+    updateValue(pitchInput, pitchVal, 'tts-pitch');
+    updateValue(volumeInput, volumeVal, 'tts-volume');
+
+    function getVoiceScore(voice) {
+        let score = 0;
+        if (voice.lang === 'de-DE') score += 10;
         
-        voiceSelect.innerHTML = '';
+        const name = voice.name.toLowerCase();
+        const positiveKeywords = ['neural', 'natural', 'premium', 'enhanced', 'google', 'microsoft', 'katja', 'conrad', 'anna', 'siri'];
+        const negativeKeywords = ['espeak', 'pico', 'compact'];
+        
+        positiveKeywords.forEach(kw => {
+            if (name.includes(kw)) score += 5;
+        });
+        
+        negativeKeywords.forEach(kw => {
+            if (name.includes(kw)) score -= 10;
+        });
+        
+        return score;
+    }
+
+    function populateVoiceList() {
+        const allowedLangs = ['de', 'de-de', 'de-at', 'de-ch'];
+        voices = synth.getVoices().filter(voice => allowedLangs.includes(voice.lang.toLowerCase()));
         
         if (voices.length === 0) {
             errorMessage.style.display = 'block';
-            const option = document.createElement('option');
-            option.textContent = 'Keine deutsche Stimme verfügbar';
-            voiceSelect.appendChild(option);
+            voiceSelect.innerHTML = '<option value="">Keine deutsche Stimme verfügbar</option>';
             voiceSelect.disabled = true;
             btnStart.disabled = true;
             btnPause.disabled = true;
@@ -141,19 +227,41 @@
 
         errorMessage.style.display = 'none';
         voiceSelect.disabled = false;
-        btnStart.disabled = false;
-        btnPause.disabled = true;
-        btnResume.disabled = true;
-        btnStop.disabled = true;
+
+        voices.sort((a, b) => getVoiceScore(b) - getVoiceScore(a));
+
+        voiceSelect.innerHTML = '';
+        
+        const savedVoiceURI = localStorage.getItem('tts-voice');
+        let voiceFound = false;
 
         voices.forEach((voice) => {
             const option = document.createElement('option');
-            option.textContent = `${voice.name} (${voice.lang})`;
-            option.setAttribute('data-lang', voice.lang);
-            option.setAttribute('data-name', voice.name);
+            const score = getVoiceScore(voice);
+            const recommended = score >= 10 ? ' (empfohlen)' : '';
+            const location = voice.localService ? 'Lokal' : 'Browser/Online';
+            
+            option.textContent = `${voice.name} (${voice.lang}, ${location})${recommended}`;
+            option.value = voice.voiceURI;
+            
+            if (savedVoiceURI === voice.voiceURI) {
+                option.selected = true;
+                voiceFound = true;
+            }
+            
             voiceSelect.appendChild(option);
         });
+        
+        if (!voiceFound && voices.length > 0) {
+            voiceSelect.selectedIndex = 0;
+        }
+        
+        updateButtonsState();
     }
+
+    voiceSelect.addEventListener('change', () => {
+        localStorage.setItem('tts-voice', voiceSelect.value);
+    });
 
     function updateButtonsState() {
         if (voices.length === 0) return;
@@ -163,54 +271,60 @@
         btnStop.disabled = !synth.speaking;
     }
 
-    // Für Browser, die Stimmen asynchron laden (und für solche, die sie synchron laden)
-    // Beide Ansätze sind nötig, da das Verhalten browserabhängig ist.
     populateVoiceList();
     if (speechSynthesis.onvoiceschanged !== undefined) {
         speechSynthesis.onvoiceschanged = populateVoiceList;
     }
 
+    textInput.addEventListener('input', () => {
+        if (textInput.value.trim() !== '') {
+            textError.style.display = 'none';
+        }
+    });
+
     btnStart.addEventListener('click', () => {
-        // Beende aktuelle Ausgabe
+        const text = textInput.value.trim();
+        if (text === '') {
+            textError.style.display = 'block';
+            return;
+        }
+        textError.style.display = 'none';
+
         if (synth.speaking || synth.paused) {
             synth.cancel();
         }
         
-        const text = textInput.value.trim();
-        if (text !== '') {
-            const utterThis = new SpeechSynthesisUtterance(text);
-            
-            if (voiceSelect.selectedOptions && voiceSelect.selectedOptions.length > 0) {
-                const selectedOption = voiceSelect.selectedOptions[0].getAttribute('data-name');
-                for (let i = 0; i < voices.length; i++) {
-                    if (voices[i].name === selectedOption) {
-                        utterThis.voice = voices[i];
-                        break;
-                    }
-                }
-            }
-            
-            utterThis.onstart = updateButtonsState;
-            utterThis.onend = () => {
-                updateButtonsState();
-                // Ensure buttons reset when speech finishes naturally
-                btnPause.disabled = true;
-                btnResume.disabled = true;
-                btnStop.disabled = true;
-            };
-            utterThis.onpause = updateButtonsState;
-            utterThis.onresume = updateButtonsState;
-            utterThis.onerror = () => {
-                updateButtonsState();
-                btnPause.disabled = true;
-                btnResume.disabled = true;
-                btnStop.disabled = true;
-            };
-            
-            synth.speak(utterThis);
-            // In some browsers, state might not update instantly, wait 100ms as a workaround
-            setTimeout(updateButtonsState, 100);
+        const utterThis = new SpeechSynthesisUtterance(text);
+        
+        const selectedURI = voiceSelect.value;
+        const selectedVoice = voices.find(v => v.voiceURI === selectedURI);
+        if (selectedVoice) {
+            utterThis.voice = selectedVoice;
         }
+        
+        utterThis.rate = parseFloat(rateInput.value);
+        utterThis.pitch = parseFloat(pitchInput.value);
+        utterThis.volume = parseFloat(volumeInput.value);
+        utterThis.lang = selectedVoice ? selectedVoice.lang : "de-DE";
+        
+        utterThis.onstart = updateButtonsState;
+        utterThis.onend = () => {
+            updateButtonsState();
+            btnPause.disabled = true;
+            btnResume.disabled = true;
+            btnStop.disabled = true;
+        };
+        utterThis.onpause = updateButtonsState;
+        utterThis.onresume = updateButtonsState;
+        utterThis.onerror = () => {
+            updateButtonsState();
+            btnPause.disabled = true;
+            btnResume.disabled = true;
+            btnStop.disabled = true;
+        };
+        
+        synth.speak(utterThis);
+        setTimeout(updateButtonsState, 100);
     });
 
     btnPause.addEventListener('click', () => {
@@ -231,7 +345,6 @@
         if (synth.speaking || synth.paused) {
             synth.cancel();
             updateButtonsState();
-            // Force reset
             btnPause.disabled = true;
             btnResume.disabled = true;
             btnStop.disabled = true;
