@@ -323,11 +323,13 @@
     });
 
     function normalizeText(text) {
+        // Hier kann zukünftig Textbereinigung (z.B. Ersetzen von Sonderzeichen) stattfinden.
         return text;
     }
 
     function splitTextIntoSentences(text) {
         let result = [];
+        // Matched beliebige Zeichen (lazy) gefolgt von Satzzeichen/Zeilenumbruch oder den Rest des Textes
         const regex = /[\s\S]*?[.!?\n]+|[\s\S]+$/g;
         let match;
         while ((match = regex.exec(text)) !== null) {
