@@ -158,12 +158,13 @@
     function updateButtonsState() {
         if (voices.length === 0) return;
         btnStart.disabled = false;
-        btnPause.disabled = !synth.speaking || synth.paused;
+        btnPause.disabled = !(synth.speaking && !synth.paused);
         btnResume.disabled = !synth.paused;
         btnStop.disabled = !synth.speaking;
     }
 
-    // Für Browser, die Stimmen asynchron laden
+    // Für Browser, die Stimmen asynchron laden (und für solche, die sie synchron laden)
+    // Beide Ansätze sind nötig, da das Verhalten browserabhängig ist.
     populateVoiceList();
     if (speechSynthesis.onvoiceschanged !== undefined) {
         speechSynthesis.onvoiceschanged = populateVoiceList;
@@ -207,7 +208,7 @@
             };
             
             synth.speak(utterThis);
-            // In some browsers, state might not update instantly, wait 100ms
+            // In some browsers, state might not update instantly, wait 100ms as a workaround
             setTimeout(updateButtonsState, 100);
         }
     });
