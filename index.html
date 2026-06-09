@@ -110,6 +110,46 @@
                 grid-template-columns: 1fr;
             }
         }
+    
+        .current-sentence-box {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .current-sentence-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        #current-sentence-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+            min-height: 35px;
+            word-wrap: break-word;
+        }
+        .text-preview {
+            width: 100%;
+            min-height: 100px;
+            max-height: 200px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+            background-color: #fafafa;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: inherit;
+        }
+        .active-sentence {
+            background-color: #ffeeba;
+            border-radius: 3px;
+        }
+
     </style>
 </head>
 <body>
@@ -118,7 +158,16 @@
     <h1>Text-to-Speech</h1>
     <div id="error-message" class="error">Keine deutsche Stimme verfügbar.</div>
     <div id="text-error" class="error">Bitte Text eingeben.</div>
+    
+    <div class="current-sentence-box">
+        <div class="current-sentence-label">Aktuell gesprochen:</div>
+        <div id="current-sentence-display">Noch nichts gestartet.</div>
+    </div>
+
     <textarea id="text-input" placeholder="Geben Sie hier Ihren Text ein..."></textarea>
+    
+    <div id="text-preview" class="text-preview"></div>
+
     
     <div class="controls">
         <label>
@@ -151,6 +200,8 @@
 
 <script>
     const textInput = document.getElementById('text-input');
+    const textPreview = document.getElementById('text-preview');
+    const currentSentenceDisplay = document.getElementById('current-sentence-display');
     const voiceSelect = document.getElementById('voice-select');
     const btnStart = document.getElementById('btn-start');
     const btnPause = document.getElementById('btn-pause');
@@ -168,6 +219,14 @@
 
     let voices = [];
     let synth = window.speechSynthesis;
+
+    // State Variables
+    let sentences = [];
+    let currentSentenceIndex = -1;
+    let isSpeaking = false;
+    let isPaused = false;
+    let latestCursorPosition = 0;
+    let userSelectedNewPosition = false;
 
     const savedRate = localStorage.getItem('tts-rate') || '0.92';
     const savedPitch = localStorage.getItem('tts-pitch') || '1.0';
@@ -263,38 +322,140 @@
         localStorage.setItem('tts-voice', voiceSelect.value);
     });
 
-    function updateButtonsState() {
-        if (voices.length === 0) return;
-        btnStart.disabled = false;
-        btnPause.disabled = !(synth.speaking && !synth.paused);
-        btnResume.disabled = !synth.paused;
-        btnStop.disabled = !synth.speaking;
+    function normalizeText(text) {
+        // Hier kann zukünftig Textbereinigung (z.B. Ersetzen von Sonderzeichen) stattfinden.
+        return text;
     }
 
-    populateVoiceList();
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-        speechSynthesis.onvoiceschanged = populateVoiceList;
+    function splitTextIntoSentences(text) {
+        let result = [];
+        // Matched beliebige Zeichen (lazy) gefolgt von Satzzeichen/Zeilenumbruch oder den Rest des Textes
+        const regex = /[\s\S]*?[.!?\n]+|[\s\S]+$/g;
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+            if (match[0].length === 0) break;
+            result.push({
+                text: match[0],
+                startIndex: match.index,
+                endIndex: match.index + match[0].length
+            });
+        }
+        return result;
     }
 
-    textInput.addEventListener('input', () => {
-        if (textInput.value.trim() !== '') {
-            textError.style.display = 'none';
+    function getSentenceIndexFromCursor(cursorPosition) {
+        if (sentences.length === 0) return 0;
+        for (let i = 0; i < sentences.length; i++) {
+            if (cursorPosition >= sentences[i].startIndex && cursorPosition <= sentences[i].endIndex) {
+                return i;
+            }
         }
-    });
+        return sentences.length - 1;
+    }
 
-    btnStart.addEventListener('click', () => {
-        const text = textInput.value.trim();
-        if (text === '') {
-            textError.style.display = 'block';
-            return;
-        }
-        textError.style.display = 'none';
-
-        if (synth.speaking || synth.paused) {
-            synth.cancel();
+    function renderHighlightedText(activeSentenceIndex) {
+        const text = textInput.value;
+        if (sentences.length === 0 && text.length > 0) {
+            sentences = splitTextIntoSentences(text);
         }
         
-        const utterThis = new SpeechSynthesisUtterance(text);
+        textPreview.innerHTML = '';
+        
+        if (text.length === 0) return;
+
+        let currentIndex = 0;
+        sentences.forEach((sentence, index) => {
+            if (sentence.startIndex > currentIndex) {
+                const span = document.createElement('span');
+                span.textContent = text.substring(currentIndex, sentence.startIndex);
+                textPreview.appendChild(span);
+            }
+            
+            const span = document.createElement('span');
+            span.textContent = sentence.text;
+            if (index === activeSentenceIndex) {
+                span.classList.add('active-sentence');
+            }
+            textPreview.appendChild(span);
+            currentIndex = sentence.endIndex;
+        });
+        
+        if (currentIndex < text.length) {
+            const span = document.createElement('span');
+            span.textContent = text.substring(currentIndex);
+            textPreview.appendChild(span);
+        }
+    }
+
+    function updateCurrentSentenceDisplay(sentenceText) {
+        if (sentenceText && sentenceText.trim()) {
+            currentSentenceDisplay.textContent = sentenceText.trim();
+        } else {
+            currentSentenceDisplay.textContent = "Noch nichts gestartet.";
+        }
+    }
+
+    function updateButtonsState() {
+        if (voices.length === 0) return;
+        
+        btnStart.disabled = false;
+        btnPause.disabled = !isSpeaking || isPaused;
+        btnResume.disabled = !isPaused;
+        btnStop.disabled = !isSpeaking && !isPaused;
+    }
+
+    function stopSpeech() {
+        synth.cancel();
+        isSpeaking = false;
+        isPaused = false;
+        currentSentenceIndex = -1;
+        renderHighlightedText(-1);
+        updateCurrentSentenceDisplay("");
+        updateButtonsState();
+    }
+
+    function pauseSpeech() {
+        if (isSpeaking && !isPaused) {
+            synth.pause();
+            isPaused = true;
+            updateButtonsState();
+        }
+    }
+
+    function resumeSpeech() {
+        if (isPaused) {
+            if (userSelectedNewPosition) {
+                synth.cancel();
+                const idx = getSentenceIndexFromCursor(latestCursorPosition);
+                speakFromSentence(idx);
+            } else {
+                synth.resume();
+                isPaused = false;
+                updateButtonsState();
+            }
+        }
+    }
+
+    function speakNextSentence() {
+        if (currentSentenceIndex >= sentences.length || !isSpeaking) {
+            stopSpeech();
+            return;
+        }
+        
+        let sentence = sentences[currentSentenceIndex];
+        let sentenceText = sentence.text.trim();
+        
+        if (!sentenceText) {
+            currentSentenceIndex++;
+            speakNextSentence();
+            return;
+        }
+        
+        renderHighlightedText(currentSentenceIndex);
+        updateCurrentSentenceDisplay(sentenceText);
+        updateButtonsState();
+        
+        const utterThis = new SpeechSynthesisUtterance(sentenceText);
         
         const selectedURI = voiceSelect.value;
         const selectedVoice = voices.find(v => v.voiceURI === selectedURI);
@@ -307,49 +468,109 @@
         utterThis.volume = parseFloat(volumeInput.value);
         utterThis.lang = selectedVoice ? selectedVoice.lang : "de-DE";
         
-        utterThis.onstart = updateButtonsState;
-        utterThis.onend = () => {
+        utterThis.onstart = () => {
+            isSpeaking = true;
+            isPaused = false;
             updateButtonsState();
-            btnPause.disabled = true;
-            btnResume.disabled = true;
-            btnStop.disabled = true;
         };
-        utterThis.onpause = updateButtonsState;
-        utterThis.onresume = updateButtonsState;
-        utterThis.onerror = () => {
-            updateButtonsState();
-            btnPause.disabled = true;
-            btnResume.disabled = true;
-            btnStop.disabled = true;
+        
+        utterThis.onend = (e) => {
+            if (isSpeaking && !isPaused) {
+                currentSentenceIndex++;
+                // Slight delay to allow browser to handle resources, avoiding infinite call stack
+                setTimeout(() => {
+                    speakNextSentence();
+                }, 10);
+            }
+        };
+        
+        utterThis.onerror = (e) => {
+            console.error('SpeechSynthesis error:', e);
+            // If we intentionally cancelled, do nothing. Otherwise proceed.
         };
         
         synth.speak(utterThis);
-        setTimeout(updateButtonsState, 100);
-    });
+    }
 
-    btnPause.addEventListener('click', () => {
-        if (synth.speaking && !synth.paused) {
-            synth.pause();
-            updateButtonsState();
+    function speakFromSentence(index) {
+        const text = normalizeText(textInput.value);
+        if (text.trim() === '') {
+            textError.style.display = 'block';
+            return;
+        }
+        textError.style.display = 'none';
+        
+        synth.cancel();
+        sentences = splitTextIntoSentences(text);
+        
+        if (sentences.length === 0) return;
+        
+        currentSentenceIndex = Math.max(0, Math.min(index, sentences.length - 1));
+        isSpeaking = true;
+        isPaused = false;
+        userSelectedNewPosition = false;
+        
+        speakNextSentence();
+    }
+
+    // Cursor Tracking
+    function handleCursorUpdate() {
+        latestCursorPosition = textInput.selectionStart;
+        if (isPaused) {
+            userSelectedNewPosition = true;
+        }
+        
+        // Always update preview highlighting when clicking during text input (if not speaking)
+        if (!isSpeaking || isPaused) {
+            const tempSentences = splitTextIntoSentences(textInput.value);
+            if (tempSentences.length > 0) {
+                sentences = tempSentences;
+                const idx = getSentenceIndexFromCursor(latestCursorPosition);
+                renderHighlightedText(idx);
+            } else {
+                renderHighlightedText(-1);
+            }
+        }
+    }
+
+    textInput.addEventListener('click', handleCursorUpdate);
+    textInput.addEventListener('keyup', handleCursorUpdate);
+    textInput.addEventListener('select', handleCursorUpdate);
+
+    textInput.addEventListener('input', () => {
+        if (textInput.value.trim() !== '') {
+            textError.style.display = 'none';
+        }
+        
+        if (isSpeaking && !isPaused) {
+            // Option: stop speaking when user types, or just reset state
+            stopSpeech();
+        } else {
+            sentences = splitTextIntoSentences(textInput.value);
+            renderHighlightedText(-1);
         }
     });
 
-    btnResume.addEventListener('click', () => {
-        if (synth.paused) {
-            synth.resume();
-            updateButtonsState();
+    btnStart.addEventListener('click', () => {
+        let startIdx = 0;
+        if (userSelectedNewPosition || (latestCursorPosition > 0 && !isSpeaking)) {
+            sentences = splitTextIntoSentences(textInput.value);
+            startIdx = getSentenceIndexFromCursor(latestCursorPosition);
         }
+        speakFromSentence(startIdx);
     });
 
-    btnStop.addEventListener('click', () => {
-        if (synth.speaking || synth.paused) {
-            synth.cancel();
-            updateButtonsState();
-            btnPause.disabled = true;
-            btnResume.disabled = true;
-            btnStop.disabled = true;
-        }
-    });
+    btnPause.addEventListener('click', pauseSpeech);
+    btnResume.addEventListener('click', resumeSpeech);
+    btnStop.addEventListener('click', stopSpeech);
+
+    populateVoiceList();
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+        speechSynthesis.onvoiceschanged = populateVoiceList;
+    }
+    
+    // Initial render
+    renderHighlightedText(-1);
 </script>
 
 </body>
