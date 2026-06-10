@@ -184,6 +184,14 @@
         </label>
     </div>
 
+    <label for="repeat-mode" style="font-weight: bold; font-size: 14px; margin-bottom: 5px; display: block;">Wiederholung:</label>
+    <select id="repeat-mode">
+        <option value="1">1x</option>
+        <option value="2">2x</option>
+        <option value="loop">Loop</option>
+    </select>
+
+    <label for="voice-select" style="font-weight: bold; font-size: 14px; margin-bottom: 5px; display: block;">Stimme:</label>
     <select id="voice-select">
         <option value="">Lade Stimmen...</option>
     </select>
@@ -225,6 +233,8 @@
     let currentSentenceIndex = -1;
     let isSpeaking = false;
     let isPaused = false;
+    let isStopped = false;
+    let repeatCount = 0;
     let latestCursorPosition = 0;
     let userSelectedNewPosition = false;
 
@@ -405,6 +415,7 @@
     }
 
     function stopSpeech() {
+        isStopped = true;
         synth.cancel();
         isSpeaking = false;
         isPaused = false;
@@ -437,9 +448,26 @@
     }
 
     function speakNextSentence() {
-        if (currentSentenceIndex >= sentences.length || !isSpeaking) {
+        if (!isSpeaking) {
             stopSpeech();
             return;
+        }
+
+        if (currentSentenceIndex >= sentences.length) {
+            if (isStopped) {
+                stopSpeech();
+                return;
+            }
+
+            const repeatMode = document.getElementById('repeat-mode').value;
+            repeatCount++;
+            
+            if (repeatMode === 'loop' || (repeatMode === '2' && repeatCount < 2)) {
+                currentSentenceIndex = 0;
+            } else {
+                stopSpeech();
+                return;
+            }
         }
         
         let sentence = sentences[currentSentenceIndex];
@@ -475,7 +503,7 @@
         };
         
         utterThis.onend = (e) => {
-            if (isSpeaking && !isPaused) {
+            if (isSpeaking && !isPaused && !isStopped) {
                 currentSentenceIndex++;
                 // Slight delay to allow browser to handle resources, avoiding infinite call stack
                 setTimeout(() => {
@@ -508,6 +536,7 @@
         currentSentenceIndex = Math.max(0, Math.min(index, sentences.length - 1));
         isSpeaking = true;
         isPaused = false;
+        isStopped = false;
         userSelectedNewPosition = false;
         
         speakNextSentence();
@@ -552,6 +581,8 @@
     });
 
     btnStart.addEventListener('click', () => {
+        isStopped = false;
+        repeatCount = 0;
         let startIdx = 0;
         if (userSelectedNewPosition || (latestCursorPosition > 0 && !isSpeaking)) {
             sentences = splitTextIntoSentences(textInput.value);
