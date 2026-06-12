@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Text-to-Speech</title>
+
+    <!-- PDF lesen -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+    <!-- DOCX lesen -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+    <!-- ODT lesen -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -17,6 +27,7 @@
             padding: 20px;
             box-sizing: border-box;
         }
+
         .container {
             background: #fff;
             padding: 20px;
@@ -25,11 +36,13 @@
             width: 100%;
             max-width: 500px;
         }
+
         h1 {
             text-align: center;
             margin-top: 0;
             color: #007bff;
         }
+
         textarea {
             width: 100%;
             height: 150px;
@@ -42,6 +55,7 @@
             margin-bottom: 15px;
             font-family: inherit;
         }
+
         select {
             width: 100%;
             padding: 10px;
@@ -52,26 +66,66 @@
             box-sizing: border-box;
             background-color: #fff;
         }
+
+        .upload-box {
+            border: 1px dashed #bbb;
+            background-color: #fafafa;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+
+        .upload-box label {
+            display: block;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .upload-box input[type="file"] {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .file-status {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+            line-height: 1.4;
+        }
+
+        .file-status.ok {
+            color: #198754;
+        }
+
+        .file-status.error-status {
+            color: #d9534f;
+        }
+
         .controls {
             display: flex;
             flex-direction: column;
             gap: 10px;
             margin-bottom: 15px;
         }
+
         .controls label {
             display: flex;
             flex-direction: column;
             font-size: 14px;
             font-weight: bold;
         }
+
         .controls input[type="range"] {
             margin-top: 5px;
         }
+
         .buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
         }
+
         button {
             padding: 10px;
             font-size: 16px;
@@ -83,13 +137,16 @@
             transition: background-color 0.3s;
             font-weight: bold;
         }
+
         button:hover:not(:disabled) {
             background-color: #0056b3;
         }
+
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
+
         .error {
             color: #d9534f;
             background-color: #f2dede;
@@ -99,18 +156,20 @@
             margin-bottom: 15px;
             display: none;
         }
+
         .hint {
             font-size: 12px;
             color: #666;
             margin-top: 15px;
             text-align: center;
         }
+
         @media (max-width: 400px) {
             .buttons {
                 grid-template-columns: 1fr;
             }
         }
-    
+
         .current-sentence-box {
             background-color: #e9ecef;
             padding: 15px;
@@ -118,11 +177,13 @@
             margin-bottom: 15px;
             text-align: center;
         }
+
         .current-sentence-label {
             font-size: 14px;
             color: #666;
             margin-bottom: 5px;
         }
+
         #current-sentence-display {
             font-size: 24px;
             font-weight: bold;
@@ -130,6 +191,7 @@
             min-height: 35px;
             word-wrap: break-word;
         }
+
         .text-preview {
             width: 100%;
             min-height: 100px;
@@ -145,6 +207,7 @@
             white-space: pre-wrap;
             font-family: inherit;
         }
+
         .active-sentence {
             background-color: #ffeeba;
             border-radius: 3px;
@@ -155,16 +218,30 @@
 
 <div class="container">
     <h1>Text-to-Speech</h1>
+
     <div id="error-message" class="error">Keine deutsche Stimme verfügbar.</div>
     <div id="text-error" class="error">Bitte Text eingeben.</div>
-    
+    <div id="file-error" class="error"></div>
+
     <div class="current-sentence-box">
         <div class="current-sentence-label">Aktuell gesprochen:</div>
         <div id="current-sentence-display">Noch nichts gestartet.</div>
     </div>
 
+    <div class="upload-box">
+        <label for="document-upload">Dokument hochladen und Text einfügen:</label>
+        <input
+            type="file"
+            id="document-upload"
+            accept=".txt,.md,.csv,.json,.html,.htm,.xml,.rtf,.pdf,.docx,.odt,text/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
+        >
+        <div id="file-status" class="file-status">
+            Unterstützt: PDF, TXT, DOCX, ODT, RTF, HTML, CSV, JSON, XML, Markdown.
+        </div>
+    </div>
+
     <textarea id="text-input" placeholder="Geben Sie hier Ihren Text ein..."></textarea>
-    
+
     <div id="text-preview" class="text-preview"></div>
 
     <div class="controls">
@@ -172,14 +249,17 @@
             Geschwindigkeit: <span id="rate-val">0.92</span>
             <input type="range" id="rate" min="0.6" max="1.4" step="0.05" value="0.92">
         </label>
+
         <label>
             Tonhöhe: <span id="pitch-val">1.0</span>
             <input type="range" id="pitch" min="0.7" max="1.3" step="0.05" value="1.0">
         </label>
+
         <label>
             Lautstärke: <span id="volume-val">1.0</span>
             <input type="range" id="volume" min="0" max="1" step="0.05" value="1.0">
         </label>
+
         <label>
             Wiederholung:
             <select id="repeat-mode">
@@ -200,8 +280,11 @@
         <button id="btn-resume">Fortsetzen</button>
         <button id="btn-stop">Stop</button>
     </div>
-    
-    <p class="hint">Die verfügbaren Stimmen hängen von deinem Browser und Betriebssystem ab. Für bessere deutsche Stimmen installiere zusätzliche Systemstimmen.</p>
+
+    <p class="hint">
+        Die verfügbaren Stimmen hängen von deinem Browser und Betriebssystem ab.
+        Für bessere deutsche Stimmen installiere zusätzliche Systemstimmen.
+    </p>
 </div>
 
 <script>
@@ -216,13 +299,21 @@
     const btnStop = document.getElementById('btn-stop');
     const errorMessage = document.getElementById('error-message');
     const textError = document.getElementById('text-error');
-    
+    const fileError = document.getElementById('file-error');
+    const documentUpload = document.getElementById('document-upload');
+    const fileStatus = document.getElementById('file-status');
+
     const rateInput = document.getElementById('rate');
     const pitchInput = document.getElementById('pitch');
     const volumeInput = document.getElementById('volume');
     const rateVal = document.getElementById('rate-val');
     const pitchVal = document.getElementById('pitch-val');
     const volumeVal = document.getElementById('volume-val');
+
+    if (window.pdfjsLib) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
 
     let voices = [];
     let synth = window.speechSynthesis;
@@ -245,7 +336,7 @@
     const savedPitch = localStorage.getItem('tts-pitch') || '1.0';
     const savedVolume = localStorage.getItem('tts-volume') || '1.0';
     const savedRepeatMode = localStorage.getItem('tts-repeat-mode') || 'once';
-    
+
     rateInput.value = savedRate;
     pitchInput.value = savedPitch;
     volumeInput.value = savedVolume;
@@ -272,27 +363,47 @@
 
     function getVoiceScore(voice) {
         let score = 0;
+
         if (voice.lang === 'de-DE') score += 10;
-        
+
         const name = voice.name.toLowerCase();
-        const positiveKeywords = ['neural', 'natural', 'premium', 'enhanced', 'google', 'microsoft', 'katja', 'conrad', 'anna', 'siri'];
-        const negativeKeywords = ['espeak', 'pico', 'compact'];
-        
+        const positiveKeywords = [
+            'neural',
+            'natural',
+            'premium',
+            'enhanced',
+            'google',
+            'microsoft',
+            'katja',
+            'conrad',
+            'anna',
+            'siri'
+        ];
+
+        const negativeKeywords = [
+            'espeak',
+            'pico',
+            'compact'
+        ];
+
         positiveKeywords.forEach(kw => {
             if (name.includes(kw)) score += 5;
         });
-        
+
         negativeKeywords.forEach(kw => {
             if (name.includes(kw)) score -= 10;
         });
-        
+
         return score;
     }
 
     function populateVoiceList() {
         const allowedLangs = ['de', 'de-de', 'de-at', 'de-ch'];
-        voices = synth.getVoices().filter(voice => allowedLangs.includes(voice.lang.toLowerCase()));
-        
+
+        voices = synth.getVoices().filter(voice =>
+            allowedLangs.includes(voice.lang.toLowerCase())
+        );
+
         if (voices.length === 0) {
             errorMessage.style.display = 'block';
             voiceSelect.innerHTML = '<option value="">Keine deutsche Stimme verfügbar</option>';
@@ -310,7 +421,7 @@
         voices.sort((a, b) => getVoiceScore(b) - getVoiceScore(a));
 
         voiceSelect.innerHTML = '';
-        
+
         const savedVoiceURI = localStorage.getItem('tts-voice');
         let voiceFound = false;
 
@@ -319,22 +430,22 @@
             const score = getVoiceScore(voice);
             const recommended = score >= 10 ? ' (empfohlen)' : '';
             const location = voice.localService ? 'Lokal' : 'Browser/Online';
-            
+
             option.textContent = `${voice.name} (${voice.lang}, ${location})${recommended}`;
             option.value = voice.voiceURI;
-            
+
             if (savedVoiceURI === voice.voiceURI) {
                 option.selected = true;
                 voiceFound = true;
             }
-            
+
             voiceSelect.appendChild(option);
         });
-        
+
         if (!voiceFound && voices.length > 0) {
             voiceSelect.selectedIndex = 0;
         }
-        
+
         updateButtonsState();
     }
 
@@ -368,7 +479,10 @@
         if (sentences.length === 0) return 0;
 
         for (let i = 0; i < sentences.length; i++) {
-            if (cursorPosition >= sentences[i].startIndex && cursorPosition <= sentences[i].endIndex) {
+            if (
+                cursorPosition >= sentences[i].startIndex &&
+                cursorPosition <= sentences[i].endIndex
+            ) {
                 return i;
             }
         }
@@ -380,7 +494,10 @@
         if (sentences.length === 0) return 0;
 
         for (let i = 0; i < sentences.length; i++) {
-            if (charIndex >= sentences[i].startIndex && charIndex < sentences[i].endIndex) {
+            if (
+                charIndex >= sentences[i].startIndex &&
+                charIndex < sentences[i].endIndex
+            ) {
                 return i;
             }
         }
@@ -394,9 +511,9 @@
         if (sentences.length === 0 && text.length > 0) {
             sentences = splitTextIntoSentences(text);
         }
-        
+
         textPreview.innerHTML = '';
-        
+
         if (text.length === 0) return;
 
         let currentIndex = 0;
@@ -407,7 +524,7 @@
                 span.textContent = text.substring(currentIndex, sentence.startIndex);
                 textPreview.appendChild(span);
             }
-            
+
             const span = document.createElement('span');
             span.textContent = sentence.text;
 
@@ -418,7 +535,7 @@
             textPreview.appendChild(span);
             currentIndex = sentence.endIndex;
         });
-        
+
         if (currentIndex < text.length) {
             const span = document.createElement('span');
             span.textContent = text.substring(currentIndex);
@@ -436,7 +553,7 @@
 
     function updateButtonsState() {
         if (voices.length === 0) return;
-        
+
         btnStart.disabled = false;
         btnPause.disabled = !isSpeaking || isPaused;
         btnResume.disabled = !isPaused;
@@ -499,7 +616,12 @@
             currentSentenceIndex = playbackStartIndex;
 
             setTimeout(() => {
-                if (sessionId === speechSessionId && !isStopped && isSpeaking && !isPaused) {
+                if (
+                    sessionId === speechSessionId &&
+                    !isStopped &&
+                    isSpeaking &&
+                    !isPaused
+                ) {
                     speakNextSentence(sessionId);
                 }
             }, repeatDelayMs);
@@ -569,7 +691,12 @@
         };
 
         utterThis.onend = () => {
-            if (sessionId === speechSessionId && isSpeaking && !isPaused && !isStopped) {
+            if (
+                sessionId === speechSessionId &&
+                isSpeaking &&
+                !isPaused &&
+                !isStopped
+            ) {
                 currentSentenceIndex = sentences.length;
                 handlePlaythroughFinished(sessionId);
             }
@@ -591,7 +718,7 @@
         }
 
         textError.style.display = 'none';
-        
+
         speechSessionId++;
         const sessionId = speechSessionId;
 
@@ -601,19 +728,19 @@
         synth.cancel();
 
         sentences = splitTextIntoSentences(text);
-        
+
         if (sentences.length === 0) {
             finishSpeech();
             return;
         }
-        
+
         currentSentenceIndex = Math.max(0, Math.min(index, sentences.length - 1));
         playbackStartIndex = currentSentenceIndex;
 
         isSpeaking = true;
         isPaused = false;
         userSelectedNewPosition = false;
-        
+
         speakNextSentence(sessionId);
     }
 
@@ -623,7 +750,7 @@
         if (isPaused) {
             userSelectedNewPosition = true;
         }
-        
+
         if (!isSpeaking || isPaused) {
             const tempSentences = splitTextIntoSentences(textInput.value);
 
@@ -645,7 +772,7 @@
         if (textInput.value.trim() !== '') {
             textError.style.display = 'none';
         }
-        
+
         if (isSpeaking && !isPaused) {
             stopSpeech();
         } else {
@@ -669,12 +796,268 @@
     btnResume.addEventListener('click', resumeSpeech);
     btnStop.addEventListener('click', stopSpeech);
 
+    function cleanExtractedText(text) {
+        return String(text || '')
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n')
+            .replace(/[ \t]+\n/g, '\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    function getFileExtension(fileName) {
+        const parts = fileName.toLowerCase().split('.');
+        return parts.length > 1 ? parts.pop() : '';
+    }
+
+    function readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+
+            reader.readAsText(file);
+        });
+    }
+
+    async function extractPdfText(file) {
+        if (!window.pdfjsLib) {
+            throw new Error('PDF-Bibliothek konnte nicht geladen werden.');
+        }
+
+        const arrayBuffer = await file.arrayBuffer();
+
+        const pdf = await pdfjsLib.getDocument({
+            data: arrayBuffer
+        }).promise;
+
+        const pages = [];
+
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+            const page = await pdf.getPage(pageNumber);
+            const textContent = await page.getTextContent();
+
+            const pageText = textContent.items
+                .map(item => item.str || '')
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (pageText) {
+                pages.push(pageText);
+            }
+        }
+
+        return cleanExtractedText(pages.join('\n\n'));
+    }
+
+    async function extractDocxText(file) {
+        if (!window.mammoth) {
+            throw new Error('DOCX-Bibliothek konnte nicht geladen werden.');
+        }
+
+        const arrayBuffer = await file.arrayBuffer();
+
+        const result = await mammoth.extractRawText({
+            arrayBuffer: arrayBuffer
+        });
+
+        return cleanExtractedText(result.value || '');
+    }
+
+    async function extractOdtText(file) {
+        if (!window.JSZip) {
+            throw new Error('ODT-Bibliothek konnte nicht geladen werden.');
+        }
+
+        const arrayBuffer = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const contentFile = zip.file('content.xml');
+
+        if (!contentFile) {
+            throw new Error('ODT-Datei enthält keinen lesbaren Inhalt.');
+        }
+
+        const xmlString = await contentFile.async('text');
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, 'application/xml');
+
+        const parserError = xmlDoc.querySelector('parsererror');
+
+        if (parserError) {
+            throw new Error('ODT-Inhalt konnte nicht gelesen werden.');
+        }
+
+        const textNodes = Array.from(xmlDoc.getElementsByTagName('*'))
+            .filter(node => node.localName === 'p' || node.localName === 'h')
+            .map(node => node.textContent.trim())
+            .filter(Boolean);
+
+        return cleanExtractedText(textNodes.join('\n\n'));
+    }
+
+    function stripRtfFormatting(rtfText) {
+        return String(rtfText || '')
+            .replace(/\\par[d]?/gi, '\n')
+            .replace(/\\tab/gi, '\t')
+            .replace(/\\'[0-9a-fA-F]{2}/g, ' ')
+            .replace(/\\[a-z]+\d* ?/gi, '')
+            .replace(/[{}]/g, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    function extractHtmlText(htmlText) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        return cleanExtractedText(doc.body ? doc.body.textContent : htmlText);
+    }
+
+    function extractXmlText(xmlText) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xmlText, 'application/xml');
+        const parserError = doc.querySelector('parsererror');
+
+        if (parserError) {
+            return cleanExtractedText(xmlText);
+        }
+
+        return cleanExtractedText(doc.documentElement.textContent || xmlText);
+    }
+
+    async function extractTextFromFile(file) {
+        const extension = getFileExtension(file.name);
+        const mime = (file.type || '').toLowerCase();
+
+        if (extension === 'pdf' || mime === 'application/pdf') {
+            return await extractPdfText(file);
+        }
+
+        if (
+            extension === 'docx' ||
+            mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ) {
+            return await extractDocxText(file);
+        }
+
+        if (
+            extension === 'odt' ||
+            mime === 'application/vnd.oasis.opendocument.text'
+        ) {
+            return await extractOdtText(file);
+        }
+
+        if (extension === 'doc') {
+            throw new Error(
+                'Alte .doc-Dateien werden im Browser nicht zuverlässig unterstützt. Bitte als .docx speichern und erneut hochladen.'
+            );
+        }
+
+        const rawText = await readFileAsText(file);
+
+        if (extension === 'html' || extension === 'htm' || mime === 'text/html') {
+            return extractHtmlText(rawText);
+        }
+
+        if (extension === 'xml' || mime.includes('xml')) {
+            return extractXmlText(rawText);
+        }
+
+        if (extension === 'rtf' || mime === 'application/rtf' || mime === 'text/rtf') {
+            return cleanExtractedText(stripRtfFormatting(rawText));
+        }
+
+        return cleanExtractedText(rawText);
+    }
+
+    function insertTextIntoTextarea(insertedText) {
+        const currentText = textInput.value;
+        const start = textInput.selectionStart ?? currentText.length;
+        const end = textInput.selectionEnd ?? currentText.length;
+
+        const before = currentText.substring(0, start);
+        const after = currentText.substring(end);
+
+        const separatorBefore =
+            before.length > 0 && !before.endsWith('\n') ? '\n\n' : '';
+
+        const separatorAfter =
+            after.length > 0 && !insertedText.endsWith('\n') ? '\n\n' : '';
+
+        textInput.value = before + separatorBefore + insertedText + separatorAfter + after;
+
+        const newCursorPosition = before.length + separatorBefore.length + insertedText.length;
+        textInput.focus();
+        textInput.setSelectionRange(newCursorPosition, newCursorPosition);
+
+        latestCursorPosition = newCursorPosition;
+        sentences = splitTextIntoSentences(textInput.value);
+        renderHighlightedText(-1);
+
+        if (textInput.value.trim() !== '') {
+            textError.style.display = 'none';
+        }
+    }
+
+    function setFileStatus(message, type = '') {
+        fileStatus.textContent = message;
+        fileStatus.className = 'file-status';
+
+        if (type === 'ok') {
+            fileStatus.classList.add('ok');
+        }
+
+        if (type === 'error') {
+            fileStatus.classList.add('error-status');
+        }
+    }
+
+    documentUpload.addEventListener('change', async () => {
+        const file = documentUpload.files && documentUpload.files[0];
+
+        if (!file) return;
+
+        fileError.style.display = 'none';
+        fileError.textContent = '';
+
+        setFileStatus(`Lese Datei: ${file.name} ...`);
+
+        try {
+            if (isSpeaking || isPaused) {
+                stopSpeech();
+            }
+
+            const extractedText = await extractTextFromFile(file);
+
+            if (!extractedText.trim()) {
+                throw new Error('Aus dieser Datei konnte kein Text extrahiert werden.');
+            }
+
+            insertTextIntoTextarea(extractedText);
+
+            setFileStatus(
+                `Text aus "${file.name}" wurde eingefügt. Zeichen: ${extractedText.length}`,
+                'ok'
+            );
+        } catch (error) {
+            console.error(error);
+
+            fileError.textContent = error.message || 'Datei konnte nicht verarbeitet werden.';
+            fileError.style.display = 'block';
+
+            setFileStatus('Fehler beim Lesen der Datei.', 'error');
+        } finally {
+            documentUpload.value = '';
+        }
+    });
+
     populateVoiceList();
 
     if (speechSynthesis.onvoiceschanged !== undefined) {
         speechSynthesis.onvoiceschanged = populateVoiceList;
     }
-    
+
     renderHighlightedText(-1);
 </script>
 
